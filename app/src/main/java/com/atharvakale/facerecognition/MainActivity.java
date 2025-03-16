@@ -128,15 +128,18 @@ public class MainActivity extends AppCompatActivity {
         float[][] embeddings = new float[1][192]; // 192-d embedding vector
         Utils.extractEmbeddings(tfLite, faceBitmap, embeddings);
 
-        // Create Recognition object with correct constructor parameters
+        // ✅ Add a designation (Modify this logic as needed)
+        String designation = name.equals("John") ? "Manager" : "Employee";
+
         SimilarityClassifier.Recognition recognition = new SimilarityClassifier.Recognition(
-                name, name, 1.0f
+                name, name + " - " + designation, 1.0f
         );
         recognition.setExtra(embeddings);
         registered.put(name, recognition);
 
-        Log.d("MainActivity", "Face registered: " + name);
+        Log.d("MainActivity", "Face registered: " + name + " - " + designation);
     }
+
 
     @SuppressLint("UnsafeOptInUsageError")
     private void startCamera() {
@@ -165,6 +168,7 @@ public class MainActivity extends AppCompatActivity {
         }, ContextCompat.getMainExecutor(this));
     }
 
+
     @androidx.camera.core.ExperimentalGetImage
     private void analyzeImage(ImageProxy imageProxy) {
         InputImage image = InputImage.fromMediaImage(imageProxy.getImage(), imageProxy.getImageInfo().getRotationDegrees());
@@ -186,11 +190,15 @@ public class MainActivity extends AppCompatActivity {
                             continue;
                         }
 
-                        boolean recognized = Utils.recognizeFace(registered, tfLite, croppedFace, faceBoxOverlay);
+                        // ✅ Convert bounding box to RectF
+                        RectF faceBoundingBox = new RectF(face.getBoundingBox());
+
+                        boolean recognized = Utils.recognizeFace(registered, tfLite, croppedFace, faceBoxOverlay, faceBoundingBox);
                         Log.d("FaceRecognition", "Face recognized: " + recognized);
                     }
                 })
                 .addOnFailureListener(e -> Log.e("FaceDetection", "Detection failed", e))
                 .addOnCompleteListener(task -> imageProxy.close());
     }
+
 }

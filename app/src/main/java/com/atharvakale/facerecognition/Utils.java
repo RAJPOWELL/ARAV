@@ -24,6 +24,8 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 public class Utils {
@@ -37,7 +39,6 @@ public class Utils {
         return fileChannel.map(FileChannel.MapMode.READ_ONLY, fileDescriptor.getStartOffset(), fileDescriptor.getDeclaredLength());
     }
 
-
     private static Bitmap rotateBitmap(Bitmap bitmap, int rotationDegrees) {
         if (bitmap == null) {
             Log.e("Utils", "rotateBitmap: Bitmap is null!");
@@ -48,7 +49,6 @@ public class Utils {
         matrix.postRotate(rotationDegrees);
         return Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
     }
-
 
     public static void extractEmbeddings(Interpreter tfLite, Bitmap faceBitmap, float[][] output) {
         if (faceBitmap == null) {
@@ -69,7 +69,7 @@ public class Utils {
 
         ByteBuffer imgData = ByteBuffer.allocateDirect(1 * INPUT_SIZE * INPUT_SIZE * 3 * 4);
         imgData.order(ByteOrder.nativeOrder());
-        int[] intValues = new int[INPUT_SIZE * INPUT_SIZE];  // ✅ Ensuring correct array size
+        int[] intValues = new int[INPUT_SIZE * INPUT_SIZE];
 
         faceBitmap.getPixels(intValues, 0, INPUT_SIZE, 0, 0, INPUT_SIZE, INPUT_SIZE);
 
@@ -85,7 +85,6 @@ public class Utils {
 
         tfLite.run(imgData, output);
     }
-
 
     @androidx.camera.core.ExperimentalGetImage
     public static Bitmap cropFace(androidx.camera.view.PreviewView previewView, ImageProxy imageProxy, Rect boundingBox) {
@@ -107,11 +106,8 @@ public class Utils {
         Canvas canvas = new Canvas(croppedFace);
         canvas.drawBitmap(rotatedBitmap, -bbox.left, -bbox.top, new Paint(Paint.FILTER_BITMAP_FLAG));
 
-        return Bitmap.createScaledBitmap(croppedFace, 112, 112, true); // Resize for recognition
+        return Bitmap.createScaledBitmap(croppedFace, 112, 112, true);
     }
-
-
-
 
     @androidx.camera.core.ExperimentalGetImage
     public static Bitmap imageProxyToBitmap(ImageProxy imageProxy) {
@@ -130,7 +126,7 @@ public class Utils {
         return android.graphics.BitmapFactory.decodeByteArray(jpegBytes, 0, jpegBytes.length);
     }
 
-    public static boolean recognizeFace(Map<String, SimilarityClassifier.Recognition> registered, Interpreter tfLite, Bitmap faceBitmap, FaceBoxOverlay faceBoxOverlay) {
+    public static boolean recognizeFace(Map<String, SimilarityClassifier.Recognition> registered, Interpreter tfLite, Bitmap faceBitmap, FaceBoxOverlay faceBoxOverlay, RectF boundingBox) {
         float[][] embeddings = new float[1][OUTPUT_SIZE];
         extractEmbeddings(tfLite, faceBitmap, embeddings);
 
@@ -141,14 +137,26 @@ public class Utils {
             float[] storedEmbedding = ((float[][]) entry.getValue().getExtra())[0];
             float distance = calculateDistance(embeddings[0], storedEmbedding);
 
-            if (distance < minDistance && distance < 1.0f) {
+            Log.d("FaceRecognition", "Comparing with " + entry.getKey() + " - Distance: " + distance);
+
+            if (distance < minDistance && distance < 1.2f) { // ✅ Increased threshold
                 minDistance = distance;
                 recognizedName = entry.getKey();
             }
         }
 
-        faceBoxOverlay.setRecognitionText(recognizedName);
-        return !recognizedName.equals("Unknown");
+        Log.d("FaceRecognition", "Final recognized name: " + recognizedName);
+
+        // ✅ Send detected face box & name to UI
+        List<RectF> boxes = new ArrayList<>();
+        List<String> names = new ArrayList<>();
+        boxes.add(boundingBox);
+        names.add(recognizedName);
+
+        boolean isRecognized = !recognizedName.equals("Unknown");
+        faceBoxOverlay.setFaceBoxes(boxes, names, isRecognized);
+
+        return isRecognized;
     }
 
     private static float calculateDistance(float[] emb1, float[] emb2) {
